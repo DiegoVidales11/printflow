@@ -48,3 +48,4 @@ k8s/monitoring ServiceMonitor para Prometheus
 ```bash
 cd apps/api && npm ci && npx prisma generate && npm run build && npm test
 ```
+# ESTO ES UNA PRUEBA

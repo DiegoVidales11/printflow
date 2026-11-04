@@ -1,0 +1,35 @@
+# Autoridad certificadora propia para HTTPS sin dominio público (se aplica una sola vez en el clúster).
+# 1) Un emisor autofirmado crea el certificado raíz.
+# 2) El ClusterIssuer "printflow-ca" firma los certificados de los Ingress con esa raíz.
+# Con un dominio real bastaría cambiar printflow-ca por un ClusterIssuer ACME de Let's Encrypt.
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: selfsigned
+spec:
+  selfSigned: {}
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: printflow-root-ca
+  namespace: cert-manager
+spec:
+  isCA: true
+  commonName: PrintFlow Root CA
+  secretName: printflow-root-ca
+  duration: 87600h # 10 años
+  privateKey:
+    algorithm: ECDSA
+    size: 256
+  issuerRef:
+    name: selfsigned
+    kind: ClusterIssuer
+---
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  name: printflow-ca
+spec:
+  ca:
+    secretName: printflow-root-ca

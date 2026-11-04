@@ -1,0 +1,29 @@
+# HPA: escala la API entre 3 y 8 réplicas al 70 % de CPU (necesita metrics-server, incluido en k3s).
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api
+  minReplicas: 3
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+---
+# Al drenar un nodo o actualizar, nunca se baja más de una réplica de la API a la vez.
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api
+spec:
+  maxUnavailable: 1
+  selector:
+    matchLabels: { app: api }

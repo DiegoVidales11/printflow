@@ -1,0 +1,33 @@
+# Desarrollo: menos réplicas y su propio dominio.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: printflow-dev
+resources:
+  - ../../base
+images:
+  - name: ghcr.io/diegovidales11/printflow-api
+    newTag: latest
+  - name: ghcr.io/diegovidales11/printflow-web
+    newTag: latest
+patches:
+  - target: { kind: HorizontalPodAutoscaler, name: api }
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 3
+  - target: { kind: Deployment, name: web }
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target: { kind: Ingress, name: printflow }
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: dev.192.168.100.62.nip.io
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: dev.192.168.100.62.nip.io

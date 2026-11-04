@@ -1,0 +1,86 @@
+# MongoDB 7: bitácora técnica (documentos flexibles). El ConfigMap crea la validación $jsonSchema y los índices.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongo-init
+data:
+  init.js: |
+    const b = db.getSiblingDB('bitacora');
+    b.createCollection('bitacora', { validator: { $jsonSchema: {
+      bsonType: 'object',
+      required: ['eventId', 'pedidoId', 'tipo', 'fecha'],
+      properties: {
+        eventId:     { bsonType: 'string' },
+        pedidoId:    { bsonType: 'int' },
+        impresoraId: { bsonType: ['int', 'null'] },
+        tipo:        { enum: ['CAMBIO_ESTADO', 'PARAMETROS', 'FALLA', 'NOTA'] },
+        tecnologia:  { enum: ['FDM', 'SLA', null] },
+        parametros:  { bsonType: 'object' },
+        tipoFalla:   { enum: ['DESPRENDIMIENTO', 'ATASCO', 'WARPING', 'CAPA_CORRIDA', 'OTRA', null] },
+        fotos:       { bsonType: 'array' },
+        fecha:       { bsonType: 'date' }
+      } } } });
+    b.bitacora.createIndex({ eventId: 1 }, { unique: true });
+    b.bitacora.createIndex({ pedidoId: 1 });
+    b.bitacora.createIndex({ impresoraId: 1, fecha: -1 });
+    b.bitacora.createIndex({ tipoFalla: 1 });
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+  labels: { app: mongo }
+spec:
+  clusterIP: None
+  selector: { app: mongo }
+  ports:
+    - port: 27017
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongo
+spec:
+  serviceName: mongo
+  replicas: 1
+  selector:
+    matchLabels: { app: mongo }
+  template:
+    metadata:
+      labels: { app: mongo, tier: db }
+    spec:
+      securityContext:
+        appArmorProfile:
+          type: Unconfined
+      containers:
+        - name: mongo
+          image: mongo:7
+          envFrom:
+            - secretRef: { name: db-secrets }
+          ports:
+            - containerPort: 27017
+          readinessProbe:
+            exec:
+              command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"]
+            periodSeconds: 15
+            timeoutSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 1Gi }
+          volumeMounts:
+            - name: data
+              mountPath: /data/db
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+      volumes:
+        - name: init
+          configMap: { name: mongo-init }
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 5Gi

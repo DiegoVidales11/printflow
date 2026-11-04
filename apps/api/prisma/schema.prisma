@@ -1,0 +1,187 @@
+// Esquema relacional de PrintFlow (PostgreSQL 16)
+// DATABASE_URL apunta a PgBouncer (?pgbouncer=true) y DIRECT_URL a PostgreSQL (migraciones).
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Rol {
+  CLIENTE
+  OPERADOR
+  ADMIN
+}
+
+enum EstadoPedido {
+  SOLICITADO
+  COTIZADO
+  APROBADO
+  EN_COLA
+  IMPRIMIENDO
+  POSPROCESO
+  LISTO_ENTREGA
+  ENTREGADO
+  EXPIRADO
+  CANCELADO
+  FALLIDO
+  REQUIERE_REVISION
+}
+
+enum TipoImpresora {
+  FDM
+  SLA
+}
+
+enum TipoMaterial {
+  PLA
+  PETG
+  ABS
+  TPU
+  RESINA
+}
+
+enum ResultadoIntento {
+  EN_CURSO
+  EXITO
+  FALLA
+  CANCELADO
+}
+
+model Usuario {
+  id      Int      @id @default(autoincrement())
+  email   String   @unique
+  hash    String
+  nombre  String
+  rol     Rol      @default(CLIENTE)
+  activo  Boolean  @default(true)
+  creadoEn DateTime @default(now())
+  pedidos Pedido[]
+}
+
+model Impresora {
+  id              Int           @id @default(autoincrement())
+  nombre          String        @unique
+  tipo            TipoImpresora
+  extrusorDirecto Boolean       @default(false)
+  volX            Int
+  volY            Int
+  volZ            Int
+  activa          Boolean       @default(true)
+  pedidos         Pedido[]
+  intentos        Intento[]
+}
+
+model Material {
+  id          Int          @id @default(autoincrement())
+  tipo        TipoMaterial
+  color       String
+  precioGramo Decimal      @db.Decimal(10, 2)
+  bobinas     Bobina[]
+
+  @@unique([tipo, color])
+}
+
+model Bobina {
+  id                Int       @id @default(autoincrement())
+  codigo            String    @unique
+  materialId        Int
+  material          Material  @relation(fields: [materialId], references: [id])
+  gramosDisponibles Int
+  gramosReservados  Int       @default(0)
+  gramosConsumidos  Int       @default(0)
+  reservas          Reserva[]
+  pedidos           Pedido[]
+}
+
+model Pedido {
+  id                 Int          @id @default(autoincrement())
+  folio              String       @unique
+  clienteId          Int
+  cliente            Usuario      @relation(fields: [clienteId], references: [id])
+  estado             EstadoPedido @default(SOLICITADO)
+  archivoStl         String
+  materialTipo       TipoMaterial
+  color              String
+  cantidad           Int
+  dimX               Int
+  dimY               Int
+  dimZ               Int
+  notas              String?
+  gramosEstimados    Int?
+  horasEstimadas     Decimal?     @db.Decimal(6, 2)
+  total              Decimal?     @db.Decimal(10, 2)
+  anticipo           Decimal      @default(0) @db.Decimal(10, 2)
+  anticipoDevuelto   Boolean      @default(false)
+  prioridad          Int          @default(0)
+  fallosConsecutivos Int          @default(0)
+  impresoraId        Int?
+  impresora          Impresora?   @relation(fields: [impresoraId], references: [id])
+  bobinaId           Int?
+  bobina             Bobina?      @relation(fields: [bobinaId], references: [id])
+  cotizadoEn         DateTime?
+  entregadoEn        DateTime?
+  creadoEn           DateTime     @default(now())
+  actualizadoEn      DateTime     @updatedAt
+  reservas           Reserva[]
+  intentos           Intento[]
+
+  @@index([estado])
+  @@index([clienteId])
+}
+
+model Reserva {
+  id       Int      @id @default(autoincrement())
+  pedidoId Int
+  bobinaId Int
+  gramos   Int
+  activa   Boolean  @default(true)
+  creadoEn DateTime @default(now())
+  pedido   Pedido   @relation(fields: [pedidoId], references: [id])
+  bobina   Bobina   @relation(fields: [bobinaId], references: [id])
+
+  @@index([pedidoId])
+}
+
+// Cada intento de impresión: sirve para horas-máquina, merma y tasa de fallos.
+model Intento {
+  id          Int              @id @default(autoincrement())
+  pedidoId    Int
+  impresoraId Int
+  inicio      DateTime         @default(now())
+  fin         DateTime?
+  resultado   ResultadoIntento @default(EN_CURSO)
+  horas       Decimal          @default(0) @db.Decimal(6, 2)
+  gramos      Int              @default(0)
+  merma       Int              @default(0)
+  pedido      Pedido           @relation(fields: [pedidoId], references: [id])
+  impresora   Impresora        @relation(fields: [impresoraId], references: [id])
+
+  @@index([inicio])
+}
+
+// Patrón outbox: se escribe en la misma transacción que el cambio de estado.
+model Outbox {
+  id               String   @id @default(uuid())
+  eventId          String   @unique @default(uuid())
+  tipo             String
+  payload          Json
+  publicado        Boolean  @default(false)
+  intentos         Int      @default(0)
+  siguienteIntento DateTime @default(now())
+  ultimoError      String?
+  creadoEn         DateTime @default(now())
+
+  @@index([publicado, siguienteIntento])
+}
+
+model Tarifa {
+  id               Int     @id @default(1)
+  costoHoraMaquina Decimal @db.Decimal(10, 2)
+  margen           Decimal @db.Decimal(5, 2)
+}

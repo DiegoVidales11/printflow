@@ -1,0 +1,44 @@
+:root {
+  --fondo: #f6f7f9;
+  --panel: #ffffff;
+  --texto: #1d2330;
+  --suave: #5c6577;
+  --borde: #dfe3ea;
+  --acento: #2563eb;
+  --peligro: #c62828;
+  --ok: #2e7d32;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; background: var(--fondo); color: var(--texto); }
+a { color: var(--acento); text-decoration: none; }
+header { background: #111827; color: #fff; padding: 12px 24px; display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+header a { color: #e5e7eb; }
+header .marca { font-weight: 700; color: #fff; margin-right: 12px; }
+header .usuario { margin-left: auto; font-size: 14px; color: #9ca3af; }
+main { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+h1 { font-size: 24px; margin: 0 0 16px; }
+h2 { font-size: 18px; margin: 24px 0 12px; }
+.panel { background: var(--panel); border: 1px solid var(--borde); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.fila { display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end; }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--suave); }
+input, select, textarea { padding: 8px 10px; border: 1px solid var(--borde); border-radius: 6px; font: inherit; color: var(--texto); background: #fff; min-width: 120px; }
+button { padding: 8px 14px; border-radius: 6px; border: 1px solid var(--acento); background: var(--acento); color: #fff; font: inherit; cursor: pointer; }
+button.sec { background: #fff; color: var(--acento); }
+button.peligro { border-color: var(--peligro); background: var(--peligro); }
+button:disabled { opacity: 0.5; cursor: default; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; background: var(--panel); }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--borde); }
+th { background: #f0f2f5; font-weight: 600; }
+.estado { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 12px; background: #e8eefc; color: #1e40af; }
+.estado.ENTREGADO, .estado.LISTO_ENTREGA { background: #e6f4ea; color: var(--ok); }
+.estado.CANCELADO, .estado.EXPIRADO, .estado.REQUIERE_REVISION, .estado.FALLIDO { background: #fdecea; color: var(--peligro); }
+.error { background: #fdecea; color: var(--peligro); padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; }
+.exito { background: #e6f4ea; color: var(--ok); padding: 10px 12px; border-radius: 6px; margin-bottom: 12px; }
+.paginacion { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+.suave { color: var(--suave); font-size: 13px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.kpi { font-size: 26px; font-weight: 700; }
+.evento { border-left: 3px solid var(--acento); padding: 6px 12px; margin-bottom: 8px; background: #fafbfc; font-size: 14px; }
+.evento.FALLA { border-color: var(--peligro); }
+.evento.PARAMETROS { border-color: var(--ok); }

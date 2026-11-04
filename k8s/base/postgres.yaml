@@ -1,0 +1,58 @@
+# PostgreSQL 16: fuente de verdad transaccional. StatefulSet = nombre estable (postgres-0) + su propio volumen.
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  labels: { app: postgres }
+spec:
+  clusterIP: None # headless: DNS estable postgres-0.postgres
+  selector: { app: postgres }
+  ports:
+    - port: 5432
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+spec:
+  serviceName: postgres
+  replicas: 1
+  selector:
+    matchLabels: { app: postgres }
+  template:
+    metadata:
+      labels: { app: postgres, tier: db }
+    spec:
+      securityContext:
+        # Ubuntu + AppArmor bloqueaba las señales internas de Postgres (ver reporte, sección 8)
+        appArmorProfile:
+          type: Unconfined
+      containers:
+        - name: postgres
+          image: postgres:16-alpine
+          envFrom:
+            - secretRef: { name: db-secrets }
+          env:
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "printflow"]
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { memory: 768Mi }
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 5Gi

@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: web
+  labels: { app: web }
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: web }
+  template:
+    metadata:
+      labels: { app: web, tier: frontend }
+    spec:
+      containers:
+        - name: web
+          image: ghcr.io/diegovidales11/printflow-web:latest
+          ports:
+            - name: http
+              containerPort: 3000
+          readinessProbe:
+            httpGet: { path: /login, port: http }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /login, port: http }
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 50m, memory: 96Mi }
+            limits: { cpu: 300m, memory: 256Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+  labels: { app: web }
+spec:
+  selector: { app: web }
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

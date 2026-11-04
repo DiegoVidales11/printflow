@@ -1,0 +1,13 @@
+# Solo funciona si kube-prometheus-stack está instalado (crea el tipo ServiceMonitor).
+#   kubectl -n printflow-prod apply -f k8s/monitoring/servicemonitor.yaml
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: api
+spec:
+  selector:
+    matchLabels: { app: api }
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s

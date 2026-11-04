@@ -1,0 +1,29 @@
+# RN-6: expira cotizaciones de más de 72 h. Es un CronJob (no un temporizador en la API)
+# porque con 3+ réplicas la tarea se ejecutaría 3+ veces.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: expirar-cotizaciones
+spec:
+  schedule: "*/15 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        metadata:
+          labels: { app: cron, tier: backend }
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: expirar
+              image: curlimages/curl:8.10.1
+              env:
+                - name: JWT_SECRET
+                  valueFrom: { secretKeyRef: { name: db-secrets, key: JWT_SECRET } }
+              args: ["-fsS", "-X", "POST", "-H", "X-Internal-Token: $(JWT_SECRET)", "http://api/internal/expirar"]
+              resources:
+                requests: { cpu: 10m, memory: 16Mi }
+                limits: { memory: 64Mi }

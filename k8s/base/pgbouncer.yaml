@@ -1,0 +1,44 @@
+# PgBouncer: agrupa las conexiones de todas las réplicas de la API en ~20 conexiones reales a Postgres.
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer
+  labels: { app: pgbouncer }
+spec:
+  selector: { app: pgbouncer }
+  ports:
+    - port: 6432
+      targetPort: 6432
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: pgbouncer }
+  template:
+    metadata:
+      labels: { app: pgbouncer, tier: db }
+    spec:
+      containers:
+        - name: pgbouncer
+          image: edoburu/pgbouncer:latest
+          env:
+            - { name: DB_HOST, value: postgres-0.postgres }
+            - { name: DB_NAME, value: printflow }
+            - name: DB_USER
+              valueFrom: { secretKeyRef: { name: db-secrets, key: POSTGRES_USER } }
+            - name: DB_PASSWORD
+              valueFrom: { secretKeyRef: { name: db-secrets, key: POSTGRES_PASSWORD } }
+            - { name: LISTEN_PORT, value: "6432" }
+            - { name: POOL_MODE, value: transaction }
+            - { name: AUTH_TYPE, value: scram-sha-256 }
+            - { name: MAX_CLIENT_CONN, value: "500" }
+            - { name: DEFAULT_POOL_SIZE, value: "20" }
+          ports:
+            - containerPort: 6432
+          resources:
+            requests: { cpu: 50m, memory: 32Mi }
+            limits: { memory: 128Mi }

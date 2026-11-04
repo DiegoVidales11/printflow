@@ -1,0 +1,22 @@
+# Crea las tablas (migraciones de Prisma). Se aplica una vez por ambiente:
+#   kubectl -n printflow-dev apply -f k8s/jobs/db-migrate.yaml
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: db-migrate
+spec:
+  backoffLimit: 3
+  template:
+    metadata:
+      labels: { app: db-job }
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: migrate
+          image: ghcr.io/diegovidales11/printflow-api:latest
+          command: ["npx", "prisma", "migrate", "deploy"]
+          envFrom:
+            - secretRef: { name: db-secrets }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }

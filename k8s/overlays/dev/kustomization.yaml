@@ -1,4 +1,5 @@
-# Desarrollo: menos réplicas y su propio dominio.
+# Desarrollo (clúster "dev", 1 nodo): una réplica por capa y escalado MANUAL (sin HPA),
+# como pide la práctica. Dominio propio de desarrollo.
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: printflow-dev
@@ -10,14 +11,18 @@ images:
   - name: ghcr.io/diegovidales11/printflow-web
     newTag: latest
 patches:
-  - target: { kind: HorizontalPodAutoscaler, name: api }
+  # Sin HPA en desarrollo: el escalado se hace a mano (kubectl scale) para experimentar
+  - patch: |-
+      $patch: delete
+      apiVersion: autoscaling/v2
+      kind: HorizontalPodAutoscaler
+      metadata:
+        name: api
+  - target: { kind: Deployment, name: api }
     patch: |-
-      - op: replace
-        path: /spec/minReplicas
+      - op: add
+        path: /spec/replicas
         value: 1
-      - op: replace
-        path: /spec/maxReplicas
-        value: 3
   - target: { kind: Deployment, name: web }
     patch: |-
       - op: replace

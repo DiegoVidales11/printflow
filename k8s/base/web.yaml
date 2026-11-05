@@ -11,6 +11,12 @@ spec:
     metadata:
       labels: { app: web, tier: frontend }
     spec:
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: web }
       containers:
         - name: web
           image: ghcr.io/diegovidales11/printflow-web:latest

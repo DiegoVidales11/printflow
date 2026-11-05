@@ -65,15 +65,18 @@ jobs:
     environment: ${{ startsWith(github.ref, 'refs/tags/') && 'prod' || 'dev' }}
     steps:
       - uses: actions/checkout@v4
-      - name: Desplegar con Kustomize
+      - name: Desplegar con Kustomize en el clúster del ambiente
         run: |
+          # Cada ambiente es un clúster independiente: el contexto de kubectl se llama igual que el ambiente
           AMBIENTE=${{ startsWith(github.ref, 'refs/tags/') && 'prod' || 'dev' }}
+          K="kubectl --context $AMBIENTE"
           NS=printflow-$AMBIENTE
           OWNER=${GITHUB_REPOSITORY_OWNER,,}
           TAG=${{ github.sha }}
-          kubectl apply -k k8s/overlays/$AMBIENTE
-          kubectl -n $NS set image deployment/api api=ghcr.io/$OWNER/printflow-api:$TAG
-          kubectl -n $NS set image deployment/outbox-worker worker=ghcr.io/$OWNER/printflow-api:$TAG
-          kubectl -n $NS set image deployment/web web=ghcr.io/$OWNER/printflow-web:$TAG
-          kubectl -n $NS rollout status deployment/api --timeout=300s
-          kubectl -n $NS rollout status deployment/web --timeout=300s
+          $K apply -k k8s/overlays/$AMBIENTE
+          # Misma imagen probada en dev (etiqueta = commit) promovida a prod
+          $K -n $NS set image deployment/api api=ghcr.io/$OWNER/printflow-api:$TAG
+          $K -n $NS set image deployment/outbox-worker worker=ghcr.io/$OWNER/printflow-api:$TAG
+          $K -n $NS set image deployment/web web=ghcr.io/$OWNER/printflow-web:$TAG
+          $K -n $NS rollout status deployment/api --timeout=300s
+          $K -n $NS rollout status deployment/web --timeout=300s

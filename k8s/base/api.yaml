@@ -1,4 +1,4 @@
-# API NestJS sin estado: el número de réplicas lo controla el HPA (mínimo 3 en producción).
+# API NestJS sin estado: en producción el número de réplicas lo controla el HPA (2 a 6).
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -14,6 +14,13 @@ spec:
     metadata:
       labels: { app: api, tier: backend }
     spec:
+      # Reparte las réplicas entre workers (en un clúster de un nodo no tiene efecto)
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels: { app: api }
       containers:
         - name: api
           image: ghcr.io/diegovidales11/printflow-api:latest

@@ -1,0 +1,110 @@
+# Restauración verificada en una instancia AISLADA (nunca sobre las bases de origen).
+# Un solo Pod con dos bases temporales (sidecars, sin volumen persistente) que se destruyen al terminar:
+#   1. Verifica la integridad del respaldo más reciente (sha256).
+#   2. Restaura PostgreSQL y MongoDB en esas instancias temporales.
+#   3. Compara conteos, relaciones e índices contra las bases de origen.
+#   4. Mide el tiempo total (RTO de la restauración).
+# Uso:
+#   kubectl -n printflow-prod delete job restore-test --ignore-not-found
+#   kubectl -n printflow-prod apply -f k8s/backups/restore-job.yaml
+#   kubectl -n printflow-prod logs -f job/restore-test -c restaurar-postgres
+#   kubectl -n printflow-prod logs job/restore-test -c restaurar-mongo
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: restore-test
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels: { app: backup }
+    spec:
+      restartPolicy: Never
+      securityContext:
+        appArmorProfile:
+          type: Unconfined # mismo motivo que el StatefulSet de PostgreSQL (sección 8)
+      initContainers:
+        # Instancias temporales de recuperación (sidecars nativos: viven mientras dura el Job)
+        - name: postgres-temporal
+          image: postgres:16-alpine
+          restartPolicy: Always
+          env:
+            - { name: POSTGRES_PASSWORD, value: solo-temporal }
+            - { name: POSTGRES_DB, value: printflow }
+            - { name: PGDATA, value: /tmp/pgdata }
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 512Mi }
+        - name: mongo-temporal
+          image: mongo:7
+          restartPolicy: Always
+          args: ["--bind_ip", "127.0.0.1", "--port", "27018"]
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 768Mi }
+      containers:
+        - name: restaurar-postgres
+          image: postgres:16-alpine
+          env:
+            - name: PGPASSWORD_ORIGEN
+              valueFrom: { secretKeyRef: { name: db-secrets, key: POSTGRES_PASSWORD } }
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              INICIO=$(date +%s)
+              F=$(ls -t /backups/pg/*.dump | head -1)
+              echo "== Respaldo elegido: $F"
+              (cd /backups/pg && sha256sum -c "$(basename "$F").sha256")
+              until pg_isready -h 127.0.0.1 -U postgres -q; do sleep 1; done
+              PGPASSWORD=solo-temporal pg_restore -h 127.0.0.1 -U postgres -d printflow --no-owner --exit-on-error "$F"
+              Q='SELECT (SELECT count(*) FROM "Usuario") usuarios, (SELECT count(*) FROM "Pedido") pedidos,
+                        (SELECT count(*) FROM "Bobina") bobinas, (SELECT count(*) FROM "Reserva") reservas,
+                        (SELECT count(*) FROM "Outbox") outbox,
+                        (SELECT count(*) FROM pg_constraint WHERE contype = '"'"'f'"'"') llaves_foraneas,
+                        (SELECT count(*) FROM pg_constraint WHERE contype = '"'"'c'"'"') checks,
+                        (SELECT count(*) FROM pg_indexes WHERE schemaname = '"'"'public'"'"') indices'
+              echo "== ORIGEN (postgres-0)"
+              PGPASSWORD=$PGPASSWORD_ORIGEN psql -h postgres-0.postgres -U printflow -d printflow -c "$Q"
+              echo "== RESTAURADA (instancia temporal)"
+              PGPASSWORD=solo-temporal psql -h 127.0.0.1 -U postgres -d printflow -c "$Q"
+              echo "== Muestra: pedido PF-00001 con su cliente (relación restaurada)"
+              PGPASSWORD=solo-temporal psql -h 127.0.0.1 -U postgres -d printflow -c \
+                'SELECT p.folio, p.estado, u.nombre AS cliente FROM "Pedido" p JOIN "Usuario" u ON u.id = p."clienteId" WHERE p.folio = '"'"'PF-00001'"'"';'
+              echo "== Restauración PostgreSQL completada en $(( $(date +%s) - INICIO )) s"
+          volumeMounts:
+            - { name: backups, mountPath: /backups, readOnly: true }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+        - name: restaurar-mongo
+          image: mongo:7
+          env:
+            - name: MONGO_URL
+              valueFrom: { secretKeyRef: { name: db-secrets, key: MONGO_URL } }
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -e
+              INICIO=$(date +%s)
+              F=$(ls -t /backups/mongo/*.archive.gz | head -1)
+              echo "== Respaldo elegido: $F"
+              (cd /backups/mongo && sha256sum -c "$(basename "$F").sha256")
+              until mongosh --quiet --port 27018 --eval 'db.adminCommand("ping")' >/dev/null 2>&1; do sleep 1; done
+              mongorestore --host 127.0.0.1 --port 27018 --archive="$F" --gzip --quiet
+              Q='const b = db.getSiblingDB("bitacora"); print("documentos:", b.bitacora.countDocuments(), " índices:", b.bitacora.getIndexes().length, " fallas:", b.bitacora.countDocuments({ tipo: "FALLA" }))'
+              echo "== ORIGEN (mongo-0)"
+              mongosh "$MONGO_URL" --quiet --eval "$Q"
+              echo "== RESTAURADA (instancia temporal)"
+              mongosh --port 27018 --quiet --eval "$Q"
+              echo "== Validación \$jsonSchema restaurada:"
+              mongosh --port 27018 --quiet --eval 'print(Object.keys(db.getSiblingDB("bitacora").getCollectionInfos({name:"bitacora"})[0].options.validator || {}).join(","))'
+              echo "== Restauración MongoDB completada en $(( $(date +%s) - INICIO )) s"
+          volumeMounts:
+            - { name: backups, mountPath: /backups, readOnly: true }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 512Mi }
+      volumes:
+        - name: backups
+          persistentVolumeClaim: { claimName: backups }

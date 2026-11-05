@@ -1,5 +1,6 @@
-# Producción: HPA de 3 a 8 réplicas (valores del base) y su propio dominio.
-# Con varios nodos y Longhorn instalado, cambia storageClassName a longhorn (parche comentado abajo).
+# Producción de laboratorio (clúster "prod": 1 control plane + 2 workers).
+# HPA de 2 a 6 réplicas al 60 % (valores del base), web con 2 réplicas, réplicas repartidas entre workers.
+# Dominio distinto al de desarrollo; apunta a la IP de un worker (ServiceLB publica el Ingress en los nodos).
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: printflow-prod
@@ -15,12 +16,7 @@ patches:
     patch: |-
       - op: replace
         path: /spec/rules/0/host
-        value: printflow.192.168.100.62.nip.io
+        value: printflow.192.168.100.71.nip.io
       - op: replace
         path: /spec/tls/0/hosts/0
-        value: printflow.192.168.100.62.nip.io
-  # - target: { kind: StatefulSet }
-  #   patch: |-
-  #     - op: replace
-  #       path: /spec/volumeClaimTemplates/0/spec/storageClassName
-  #       value: longhorn
+        value: printflow.192.168.100.71.nip.io

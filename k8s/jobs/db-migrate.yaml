@@ -10,6 +10,10 @@ spec:
     metadata:
       labels: { app: db-job }
     spec:
+      securityContext:
+        # AppArmor bloqueaba la señal con la que Prisma cierra su schema-engine (kill EACCES)
+        appArmorProfile:
+          type: Unconfined
       restartPolicy: OnFailure
       containers:
         - name: migrate
